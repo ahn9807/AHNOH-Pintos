@@ -175,7 +175,7 @@ thread_create (const char *name, int priority,
   struct switch_entry_frame *ef;
   struct switch_threads_frame *sf;
   tid_t tid;
-  enum intr_level old_level;
+  //enum intr_level old_level;
 
   ASSERT (function != NULL);
 
@@ -191,7 +191,7 @@ thread_create (const char *name, int priority,
   /* Prepare thread for first run by initializing its stack.
      Do this atomically so intermediate values for the 'stack' 
      member cannot be observed. */
-  old_level = intr_disable ();
+  //old_level = intr_disable ();
 
   /* Stack frame for kernel_thread(). */
   kf = alloc_frame (t, sizeof *kf);
@@ -208,12 +208,13 @@ thread_create (const char *name, int priority,
   sf->eip = switch_entry;
   sf->ebp = 0;
 
-  intr_set_level (old_level);
+  //intr_set_level (old_level);
 
   /* Add to run queue. */
   thread_unblock (t);
-
-  thread_test_priority();
+  if (t->priority > thread_get_priority ())
+    thread_yield ();
+  // thread_test_priority();
 
   return tid;
 }
@@ -304,7 +305,7 @@ thread_exit (void)
      and schedule another process.  That process will destroy us
      when it calls thread_schedule_tail(). */
   intr_disable ();
-  list_remove (&thread_current()->allelem);
+  //list_remove (&thread_current()->allelem);
   thread_current ()->status = THREAD_DYING;
   schedule ();
   NOT_REACHED ();
@@ -404,9 +405,15 @@ void thread_foreach (thread_action_func *func, void *aux)
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void thread_set_priority (int new_priority) 
 {
-  thread_current ()->priority = new_priority;
-
-  thread_test_priority();
+  struct thread *curr_thread = thread_current();
+  int priority = curr_thread->priority;
+  if(curr_thread->priority==curr_thread->init_priority || new_priority > priority){
+    curr_thread->priority = new_priority;
+  }
+  curr_thread->init_priority = new_priority;
+  if(priority > curr_thread->priority){
+    thread_yield();
+  }
 }
 
 /* Returns the current thread's priority. */
@@ -533,6 +540,9 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->magic = THREAD_MAGIC;
   list_push_back (&all_list, &t->allelem);
+  list_init(&t->donations);
+  t->init_priority = priority;
+  t->wait_on_lock = NULL;
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and
@@ -645,6 +655,28 @@ allocate_tid (void)
   return tid;
 }
 
+
+int refresh_priority(void){
+  int initial_priority = thread_current()->init_priority;
+  struct list *list = &thread_current()->donations;
+  if(list_empty(list)){
+    return initial_priority;
+  }
+
+  struct list_elem *e;
+  for (e = list_begin (list); e != list_end (list); e = list_next (e)){
+    struct semaphore *sema = &list_entry(e, struct lock, elem)->semaphore;
+    if (!list_empty (&sema->waiters))
+        {
+          int temp_priority = list_entry (list_begin (&sema->waiters),
+                                          struct thread, elem)->priority;
+          if (temp_priority > initial_priority)
+            initial_priority = temp_priority;
+        }
+    }
+  return initial_priority;
+}
+
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
