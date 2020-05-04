@@ -171,6 +171,18 @@ timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
   thread_tick ();
+
+  if(thread_mlfqs == true) {
+    mlfqs_increment();
+    if(timer_ticks() % TIMER_FREQ == 0) {
+      mlfqs_load_avg();
+      mlfqs_recalc_cpu_priority();
+    } 
+    if(timer_ticks() % 4 == 0) {
+      mlfqs_priority(thread_current());
+    }
+  }
+
   thread_awake(ticks);
 }
 
