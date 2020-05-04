@@ -5,6 +5,7 @@
 ## Implementing Alarm Clock
 
 ## Implementing Priority Scheduling
+현재 pintos는 priority에 대한 고려를 하지 않고 ready queue에 순서대로 저장하고 사용한다. 이를 해결하기 위해 thread끼리의 priority를 비교하는 함수를 만든다.
 
 ## Implementing Advanced Scheduler
 ### Problem Definition
