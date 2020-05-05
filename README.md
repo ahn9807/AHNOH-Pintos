@@ -7,10 +7,10 @@
 현재 timer_sleep 내부는 busy waiting으로 구현되어 스레드가 작동중이지 않을 때에도 리소스를 많이 필요로 해 비효율적이다. 이를 깨우는 시간을 매 시간 체크하지 않고 정확히 스레드가 요구로 하는 시간에 깨우는 함수를 만들어 해결해야 한다.
 
 ### Algorithm Design
-먼저, 스레드를 계속체크하지 않고 깨우기 위해 sleeping_list를 만든다. 스레드가 sleeping_list에 저장되면, 해당 스레드는 작동하지 않는 상태로 간주되어 매 시간 tick을 체크하지 않는다. 스레드가 sleeping_list에 들어가 있는 동안에는 block을 시켜 더이상 실행되지 않도록 막아놓는다.
+먼저, 스레드를 계속체크하지 않고 깨우기 위해 sleeping_list를 만든다. 스레드가 sleeping_list에 저장되면, 해당 스레드는 작동하지 않는 상태로 간주되어 매 시간 tick을 체크하지 않는다. 스레드가 sleeping_list에 들어가 있는 동안에는 block을 시켜 더이상 실행되지 않도록 막아놓는다. 스레드를 깨워야 할 때에는 sleeping_list에 들어가 있는 스레드를 unblock 시키고 list에서 빼내야 한다.
 
 ### Implementation
-먼저, 스레드마다 깨어날 정보를 담는 변수 wake_time을 선언한다.
+먼저, 스레드마다 깨어날 정보를 담는 변수 wake_time을 선언한다. 현재의 tick이 wake_time보다 커질 경우 thread는 unblock되어야 한다.
 
     struct thread{
         ...
@@ -18,7 +18,7 @@
         ...
     }
 
-sleeping_list를 선언하고, thread가 sleep 상태가 될 때마다 sleeping_list에 저장한다. 저장된 스레드는 block되도록 한다.
+sleeping_list를 선언하고, thread가 sleep 상태가 될 때마다 sleeping_list에 저장한다. 저장된 스레드는 block되도록 한다. 다만 현재 스레드가 idle_thread인 경우 block 시키면 안 된다. OS는 동작해야 하는 스레드가 단 한개 도 없을 경우, idle_thread를 돌려야 하기 때문이다. idle_thread가 돌지 않을 경우 동작 대기중인 스레드가 없을 때 OS는 재부팅 과정을 계속 거쳐야 하므로 비효율적이다. thread_sleep 함수 내부에서는 인터럽트가 발생하면 안 되기 때문에 intr_disable()로 미리 인터럽트를 방지한다.
 
     void thread_sleep(int64_t t)
     {
@@ -37,7 +37,7 @@ sleeping_list를 선언하고, thread가 sleep 상태가 될 때마다 sleeping_
         intr_set_level(old_level);
     }
     
-일정 tick이 지난 후 sleeping_list에서 스레드를 빼고 unblock 시키는 thread_awake 함수를 만든다. 이 함수는 스레드 고유의 wake_time변수 값이 현재의 tick값보다 큰 경우 스레드를 unblock하는 역할을 한다.
+일정 tick이 지난 후 sleeping_list에서 스레드를 빼고 unblock 시키는 thread_awake 함수를 만든다. 이 함수는 스레드 고유의 wake_time변수 값이 현재의 tick값보다 큰 경우 스레드를 unblock하는 역할을 한다. thread_awake 역시 인터럽트가 발생해 중단되면 안 되기 때문에 intr_disable로 처리한다.
 
     void thread_awake(int64_t tick) 
     {
@@ -152,7 +152,7 @@ ready queue에 스레드를 삽입할 때 우선순위가 정렬되어 삽입되
 우선순위에 따라 L, M, H 스레드가 존재한다고 가정한다. 스레드 L이 처음에 lock A를 요청해 보유하고 있다. M이 lock B를 요청하고, 작업하는 과정에서 lock A를 요청한다. 이후 H가 lock B를 요청한면 Nested Donation의 경우에 해당한다. 시간 순서대로 보면, 처음 L이 lock A를 가지고 있고, M이 lock B를 가지고 있는 상황에서 lock A를 요청하고, H가 lock B를 요청한 상황이다. 이 경우, M이 lock A를 요청하는 상황에서 첫번째 priority donation이 발생한다. 이에 따라 M의 priority가 L에게 양보된다. 이후 H가 lock B를 요청할 때 두번째 priority donation이 발생한다. 이때 L은 H의 priority를 가지게 된다. L이 lock A를 반환하게 되면 L의 priority가 M으로 양보된다. M이 lock B를 반환하게 되면 다시 L이 자신의 priority를 회수하게 되고, H가 실행되게 된다.
 
 #### Implementation
-우선순위를 저장할 struct thread 내 자료구조 선언
+우선순위를 저장할 struct thread 내 자료구조 선언한다. 해당 스레드에 여러개의 스레드들이 priority를 양보할 경우 (multiple donation)에 대응하기 위해 donations 리스트가 존재한다.
 
     struct thread{
       …
@@ -162,7 +162,7 @@ ready queue에 스레드를 삽입할 때 우선순위가 정렬되어 삽입되
       …
     }
 
-자신의 priority를 양보하는 함수 donate priority를 구현. 이 함수는 lock을 기다리는 스레드가 있을 경우 재귀적으로 호출됨.
+자신의 priority를 양보하는 함수 donate priority를 구현한다. 이 함수는 lock을 기다리는 스레드가 있을 경우 재귀적으로 호출되어 nested donation에 대응할 수 있도록 구현되어 있다.
 
     void donate_priority(struct lock *lock){
         ASSERT(lock != NULL);
@@ -176,7 +176,7 @@ ready queue에 스레드를 삽입할 때 우선순위가 정렬되어 삽입되
         }
     }
 
-lock_aquire에서 mlfqs가 아니고 lock의 holder가 존재할 때 priority donation이 일어나도록 설정
+lock_aquire에서 mlfqs가 아니고 lock의 holder가 존재할 때 priority donation이 일어나도록 설정한다. lock의 holder가 없을 때까지 priority donation은 재귀적으로 호출되며 상위 스레드의 우선순위를 lock을 가진 하위 스레드의 우선순위에 대입한다.
 
     lock_acquire (struct lock *lock)
     {
@@ -200,7 +200,7 @@ lock_aquire에서 mlfqs가 아니고 lock의 holder가 존재할 때 priority do
       }
     }
 
-lock_release에서 lock 스레드 대기열에서 release와 동시에 제거하고 priority를 초기화하도록 설정한다. priority를 초기화하는 함수를 만든다.
+스레드가 작업을 마치고 lock을 포기할 경우, 리스트에서 제거됨과 동시에 priority 값 역시 바꿔야 한다. lock_release에서 lock 스레드 대기열에서 release와 동시에 제거하고 priority를 초기화하도록 설정한다. priority를 초기화하는 함수를 만들어 lock_release 함수 내에서 호출하도록 설정한다.
 
     int refresh_priority(void){
         int initial_priority = thread_current()->init_priority;
@@ -223,7 +223,7 @@ lock_release에서 lock 스레드 대기열에서 release와 동시에 제거하
         return initial_priority;
     }
  
- thread_set_priority와 thread_get_priority를 구현해 donation이 일어날 때마다 priority들을 비교해 현재의 priority를 갱신한다.
+ 스레드 donation 관계에 따라 스레드의 priority는 지속적으로 변화하므로 그때마다 priority 값을 바꿔줄 함수를 구현한다. thread_set_priority와 thread_get_priority를 구현해 donation이 일어날 때마다 priority들을 비교해 현재의 priority를 갱신한다. 
  
     void thread_set_priority (int new_priority) 
     {
