@@ -45,6 +45,7 @@ void cond_broadcast (struct condition *, struct lock *);
 
 
 void donate_priority(struct lock *lock);
+bool priority_func (const struct list_elem *e1, const struct list_elem *e2, void *aux UNUSED);
 
 /* Optimization barrier.
 
