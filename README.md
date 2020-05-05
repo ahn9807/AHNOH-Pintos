@@ -11,7 +11,7 @@
 #### Problem Definition
 현재 pintos는 priority에 대한 고려를 하지 않고 ready queue에 순서대로 저장하고 사용한다. 이 경우 스레드가 우선순위에 상관없이 실행되어 비효율적이다. 따라서 스레드의 우선순위에 따라 실행 순서가 결정되도록 ready queue에 대기시켜줄 필요성이 있다.
 #### Algorithm Design
-1. 
+
 #### Implementation
 
 ### Requirement2 : implementing priority donation
@@ -47,7 +47,7 @@
                 donate_priority(lock->holder->wait_on_lock);
             }
         }
-   }
+    }
 
 lock_aquire에서 mlfqs가 아니고 lock의 holder가 존재할 때 priority donation이 일어나도록 설정
 
