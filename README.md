@@ -35,6 +35,19 @@
       …
     }
 
+자신의 priority를 양보하는 함수 donate priority를 구현. 이 함수는 lock을 기다리는 스레드가 있을 경우 재귀적으로 호출됨.
+
+    void donate_priority(struct lock *lock){
+        ASSERT(lock != NULL);
+        ASSERT(lock->holder != NULL);
+
+        if (thread_current ()->priority > lock->holder->priority){
+            lock->holder->priority = thread_current()->priority;
+            if(lock->holder->wait_on_lock != NULL){
+                donate_priority(lock->holder->wait_on_lock);
+            }
+        }
+   }
 
 lock_aquire에서 mlfqs가 아니고 lock의 holder가 존재할 때 priority donation이 일어나도록 설정
 
@@ -54,11 +67,60 @@ lock_aquire에서 mlfqs가 아니고 lock의 holder가 존재할 때 priority do
         lock->holder = thread_current ();
         curr_thread->wait_on_lock = NULL;
         list_push_back(&curr_thread->donations, &lock->elem);
-        } else {
-          sema_down(&lock->semaphore);
-          lock->holder = thread_current();
+      } else {
+        sema_down(&lock->semaphore);
+        lock->holder = thread_current();
+      }
+    }
+
+lock_release에서 lock 스레드 대기열에서 release와 동시에 제거하고 priority를 초기화하도록 설정한다. priority를 초기화하는 함수를 만든다.
+
+    int refresh_priority(void){
+        int initial_priority = thread_current()->init_priority;
+        struct list *list = &thread_current()->donations;
+        if(list_empty(list)){
+            return initial_priority;
+        }
+
+        struct list_elem *e;
+        for (e = list_begin (list); e != list_end (list); e = list_next (e)){
+            struct semaphore *sema = &list_entry(e, struct lock, elem)->semaphore;
+            if (!list_empty (&sema->waiters))
+            {
+                int temp_priority = list_entry (list_begin (&sema->waiters),
+                                          struct thread, elem)->priority;
+                if (temp_priority > initial_priority)
+                    initial_priority = temp_priority;
+            }
+        }
+        return initial_priority;
+    }
+ 
+ thread_set_priority와 thread_get_priority를 구현해 donation이 일어날 때마다 priority들을 비교해 현재의 priority를 갱신한다.
+ 
+    void thread_set_priority (int new_priority) 
+    {
+        if(thread_mlfqs == false) {
+            struct thread *curr_thread = thread_current();
+            int priority = curr_thread->priority;
+            if(curr_thread->priority==curr_thread->init_priority || new_priority > priority){
+                curr_thread->priority = new_priority;
+            }
+            curr_thread->init_priority = new_priority;
+            if(priority > curr_thread->priority){
+                thread_test_priority();
+            }
+        }
+        else{
+            thread_current ()->priority = new_priority;
+            thread_test_priority();
         }
     }
+    int thread_get_priority (void) 
+    {
+        return thread_current ()->priority;
+    }
+
 
 
 ## Implementing Advanced Scheduler
