@@ -27,41 +27,39 @@
 #### Implementation
 우선순위를 저장할 struct thread 내 자료구조 선언
 
-'''
-struct thread{
-…
-int init_priority;                  // 스레드의 원래 priority 저장
-struct lock *wait_on_lock;          // 스레드가 대기중인 lock의 자료구조 저장
-struct list donations;              // 스레드에 양보된 priority값들 저장
-…
-}
-'''
+    struct thread{
+      …
+      int init_priority;                  // 스레드의 원래 priority 저장
+      struct lock *wait_on_lock;          // 스레드가 대기중인 lock의 자료구조 저장
+      struct list donations;              // 스레드에 양보된 priority값들 저장
+      …
+    }
+
 
 lock_aquire에서 mlfqs가 아니고 lock의 holder가 존재할 때 priority donation이 일어나도록 설정
-'''
-lock_acquire (struct lock *lock)
-{
-  ASSERT (lock != NULL);
-  ASSERT (!intr_context ());
-  ASSERT (!lock_held_by_current_thread (lock));
+
+    lock_acquire (struct lock *lock)
+    {
+      ASSERT (lock != NULL);
+      ASSERT (!intr_context ());
+      ASSERT (!lock_held_by_current_thread (lock));
   
-  if(thread_mlfqs == false) {
-    struct thread *curr_thread = thread_current();
-    if(lock->holder != NULL){
-      donate_priority(lock);
+      if(thread_mlfqs == false) {
+        struct thread *curr_thread = thread_current();
+        if(lock->holder != NULL){
+          donate_priority(lock);
+        }
+        curr_thread->wait_on_lock = lock;
+        sema_down (&lock->semaphore);
+        lock->holder = thread_current ();
+        curr_thread->wait_on_lock = NULL;
+        list_push_back(&curr_thread->donations, &lock->elem);
+        } else {
+          sema_down(&lock->semaphore);
+          lock->holder = thread_current();
+        }
     }
-    curr_thread->wait_on_lock = lock;
-    sema_down (&lock->semaphore);
-    lock->holder = thread_current ();
-    curr_thread->wait_on_lock = NULL;
-    list_push_back(&curr_thread->donations, &lock->elem);
-  } else {
-    sema_down(&lock->semaphore);
-    lock->holder = thread_current();
-  }
-  
-}
-'''
+
 
 ## Implementing Advanced Scheduler
 ### Problem Definition
