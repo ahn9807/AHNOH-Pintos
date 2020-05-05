@@ -10,9 +10,57 @@
 ### Requirement 1: implementing priority scheduling
 #### Problem Definition
 현재 pintos는 priority에 대한 고려를 하지 않고 ready queue에 순서대로 저장하고 사용한다. 이 경우 스레드가 우선순위에 상관없이 실행되어 비효율적이다. 따라서 스레드의 우선순위에 따라 실행 순서가 결정되도록 ready queue에 대기시켜줄 필요성이 있다.
+
 #### Algorithm Design
+ready queue에 스레드를 삽입할 때 우선순위가 정렬되어 삽입되도록 수정한다. ready queue에서 현재 cpu를 점유하고 있는 스레드의 우선순위보다 높은 스레드가 존재한다면 cpu를 양보해야 한다. ready queue에 스레드가 저장되는 것은 스레드가 unblock될 때와 yield될 때이다. 따라서 unblock에서 리스트의 뒤로 스레드를 삽입하는 부분을 list_insert_ordered로 변경해 정렬되어 삽입되도록 한다.
 
 #### Implementation
+먼저, 스레드의 우선순위를 비교하는 함수를 만든다.
+
+    bool thread_order_priority(const struct list_elem* a,const struct list_elem* b, void *aux UNUSED) {
+        return list_entry(a, struct thread, elem)->priority > list_entry(b, struct thread, elem)->priority;
+    }
+    
+이 함수를 이용해 unblock 또는 yield되어 ready queue에 들어갈 때마다 정렬되어 들어가도록 한다.
+
+    void thread_unblock (struct thread *t) 
+    {
+        enum intr_level old_level;  
+        ASSERT (is_thread (t));
+        old_level = intr_disable ();
+        ASSERT (t->status == THREAD_BLOCKED);
+        list_insert_ordered (&ready_list, &t->elem, thread_order_priority, 0);
+        t->status = THREAD_READY;
+        intr_set_level (old_level);
+    }
+
+    void thread_yield (void) 
+    {
+        struct thread *cur = thread_current ();
+        enum intr_level old_level;
+  
+        ASSERT (!intr_context ());
+        old_level = intr_disable ();
+        if (cur != idle_thread) 
+            list_insert_ordered (&ready_list, &cur->elem, thread_order_priority, 0);
+        cur->status = THREAD_READY;
+        schedule ();
+        intr_set_level (old_level);
+    }
+
+현재 cpu를 점유중인 스레드와 priority를 비교해 더 높으 스레드가 대기중이면 양보하도록 하는 thread_test_priority를 만든다. 이 함수는 thread_create와 thread_set_priority 함수 내부에서 호출되도록 한다.
+
+    void thread_test_priority(void) {
+        enum intr_level old_level;
+        old_level = intr_disable();
+        struct thread* cur = thread_current();
+
+        if(!list_empty(&ready_list) && cur->priority  < list_entry(list_front(&ready_list), struct thread, elem)->priority) {
+            thread_yield();
+        }
+        intr_set_level(old_level);
+    }
+
 
 ### Requirement2 : implementing priority donation
 #### Problem Definition
