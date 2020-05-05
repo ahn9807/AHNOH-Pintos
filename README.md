@@ -36,8 +36,47 @@ sleeping_list를 선언하고, thread가 sleep 상태가 될 때마다 sleeping_
         }   
         intr_set_level(old_level);
     }
+    
+일정 tick이 지난 후 sleeping_list에서 스레드를 빼고 unblock 시키는 thread_awake 함수를 만든다. 이 함수는 스레드 고유의 wake_time변수 값이 현재의 tick값보다 큰 경우 스레드를 unblock하는 역할을 한다.
 
-일정 tick이 지난 후 sleeping_list에서 스레드를 빼고 
+    void thread_awake(int64_t tick) 
+    {
+        enum intr_level old_level;
+
+        ASSERT(intr_get_level() == INTR_OFF);
+
+        old_level = intr_disable();
+
+         while(!list_empty(&sleeping_list))
+         {
+             struct thread *t = list_entry (list_front(&sleeping_list), struct thread, elem);
+            if(t->wake_time <= tick) {
+                list_pop_front(&sleeping_list);
+                 thread_unblock(t);
+            } else {
+                break;
+            }
+        }
+        intr_set_level(old_level);
+    }
+
+위의 함수 thread_sleep과 thread_awake는 각각 스레드가 실제로 sleep되고 awake되는 함수인 timer_sleep과 timer_interrupt 내부에서 호출되어 스레드의 block과 unblock 과정을 수행해야 한다.
+
+    void timer_sleep (int64_t ticks) 
+    {
+        int64_t start = timer_ticks ();
+        ASSERT (intr_get_level () == INTR_ON);
+        thread_sleep(start + ticks);
+    }
+    
+    static void timer_interrupt (struct intr_frame *args UNUSED)
+    {
+        ticks++;
+        thread_tick ();
+        thread_awake(ticks);
+    }
+
+
 ## Implementing Priority Scheduling
 ### Requirement 1: implementing priority scheduling
 #### Problem Definition
@@ -110,12 +149,6 @@ ready queue에 스레드를 삽입할 때 우선순위가 정렬되어 삽입되
 우선순위에 따라 L, M, H 스레드가 존재한다고 가정한다. 스레드 L이 처음에 lock A를 요청해 보유하고 있다. M이 lock B를 요청하고, 작업하는 과정에서 lock A를 요청한다. 이후 H가 lock B를 요청한면 Nested Donation의 경우에 해당한다. 시간 순서대로 보면, 처음 L이 lock A를 가지고 있고, M이 lock B를 가지고 있는 상황에서 lock A를 요청하고, H가 lock B를 요청한 상황이다. 이 경우, M이 lock A를 요청하는 상황에서 첫번째 priority donation이 발생한다. 이에 따라 M의 priority가 L에게 양보된다. 이후 H가 lock B를 요청할 때 두번째 priority donation이 발생한다. 이때 L은 H의 priority를 가지게 된다. L이 lock A를 반환하게 되면 L의 priority가 M으로 양보된다. M이 lock B를 반환하게 되면 다시 L이 자신의 priority를 회수하게 되고, H가 실행되게 된다.
 
 #### Implementation
-lock, semaphore, condvar에서 waiter 대기열에 정렬되어 삽입되도록 수정한다.
-
-    void sema_up(struct semaphore *sema){
-        ...
-        
-
 우선순위를 저장할 struct thread 내 자료구조 선언
 
     struct thread{
