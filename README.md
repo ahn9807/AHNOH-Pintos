@@ -208,7 +208,7 @@ lock_release에서 lock 스레드 대기열에서 release와 동시에 제거하
 
 ## Implementing Advanced Scheduler
 ### Problem Definition
-우선순위 알고리즘에서 더욱 발전된, 다단계 피드백 큐 스케쥴링 알고리즘을 구현해야 한다. 다단계 피드백 큐란, 프로세스 (pintos 에서는 thread)들이 CPU 버스트 성격에 따라서 우선순위를 바꾸는 것이다. 어떤 프로세스가 CPU시간을 너무 많이 사용하면, 그 프로세스의 우선순위는 낮은 우선순위의 큐로 이동된다. 따라서 우리는 동적으로 우선순위가 각각의 스레드마다 배정될 수 있게 하여, CPU사용량에 따라 우선순위가 수정되고 그를 통해서 스레드를 스케쥴링 하는 것을 구현해야 한다. 
+우선순위 알고리즘에서 더욱 발전된, 다단계 피드백 큐 스케쥴링 알고리즘을 구현해야 한다. 다단계 피드백 큐란, 프로세스 (pintos 에서는 thread)들이 CPU 버스트 성격에 따라서 우선순위를 바꾸는 것이다. 어떤 프로세스가 CPU시간을 너무 많이 사용하면, 그 프로세스의 우선순위는 낮은 우선순위의 큐로 이동된다. 따라서 우리는 동적으로 우선순위가 각각의 스레드마다 배정될 수 있게 하여야 한다. CPU사용량에 따라 우선순위가 수정되고 그를 통해서 스레드를 스케쥴링 하는 것을 구현해야 한다. 
 ### Algorithm Design
 1. Nice value
 스레드의 우선순위는 동적으로 결정되지만, 스레드 마다 어느정도로 다른 스레드에 자신의 우선순위를 양보할 것인지에 대한 정도를 지정할 수 있다. 그 값을 Nice value라고, 하는데 nice 값이 0 이면 아무런 일도 하지 않지만, 양수면 다른 스레드보다 우선순위가 빨리 떨어지고, 음수면 다른 스레드보다 우선순위가 천천히 떨어지게 된다. 즉 nice value로 다른 스레드들에 대한 상대적인 위치를 지정할 수 있다. 
@@ -240,7 +240,7 @@ $$load\_avg=(59/60)*load\_avg + (1/60)*ready\_threads$$
     #define DIV_REAL(x,y) (((int64_t) (x)) * F / (y))
     #define DIV_REAL_INT(x,n) ((x)/n)
 
-nice, recent_cpu 그리고 load_avg는 각각 초기값이 정의되어야 한다. 모두 0으로 초기화 한다. 그러나 load_avg는 모든 스레드가 공유하는 것이기 떄문에, thread_start 에서 정의하고, nice와 recent_cpu는 스레드가 처음 만들어 질때 혹은 스레드가 부모스레드를 상속받을때 각각 초기화 되고 부모 스레드의 nice와 recent_cpu를 가져오도록 구현해야 한다. 
+nice, recent_cpu 그리고 load_avg는 각각 초기값이 정의되어야 한다. 모두 0으로 초기화 한다. 그러나 load_avg는 모든 스레드가 공유하는 것이기 떄문에, thread_start 에서 정의하고, nice와 recent_cpu는 스레드가 처음 만들어 질때 혹은 스레드가 부모 스레드를 상속받을 때 각각 초기화 되어야 한다. 만약 부모 스레드를 상속 받을 떄 초기화 된다면, 부모 스레드의 nice와 recent_cpu를 가져오도록 구현해야 한다. 
 
     void thread_init (void) 
     {
@@ -297,7 +297,7 @@ Nice 값은 다음과 같이 set 되고 get 된다. nice 값이 바뀌면 필연
         return thread_current()->nice;
     }
 
-스레드들을 적절히 동적으로 스케쥴링 하기 위해서는 recent_cpu, load_avg 그리고 priority를 적절한 틱당 업데이트 해주어야 한다. 그들 각각의 설명은 위에 있는 대로 구현하면 된다. 여기서 주의해야 할점은, priority를 clamp 하는 것과 채점상의 문제로 인하여 각각의 함수를 호출하는 것을 pintos document에 나와있는 대로 정확히 서술하여야 한다는 점이다. 또한 수식에 있어서 실수와 정수의 확실한 구분과 정확한 실수 계산 함수의 구현이 있었다. 많은 구현방법이 있을 수 있겠지만, 전체적인 개념을 이해한 후, 기본적인 함수의 뼈대는 KAIST OS LAB PINTOS 구현부분의 함수 선언부를 참고하였다[Ref]. 
+스레드들을 적절히 동적으로 스케줄링 하기 위해서는 recent_cpu, load_avg 그리고 priority를 적절한 틱당 업데이트 해주어야 한다. 그들 각각의 설명은 위에 있는 대로 구현하면 된다. 여기서 주의해야 할점은, priority를 clamp 하는 것과 채점상의 문제로 인하여 각각의 함수를 호출하는 것을 pintos document에 나와있는 대로 정확히 서술하여야 한다는 점이다. 또한 수식에 있어서 실수와 정수의 확실한 구분과 정확한 실수 계산 함수의 구현을 하여야 한다. 많은 구현방법이 있을 수 있겠지만, 전체적인 개념을 이해한 후, 기본적인 함수의 뼈대는 KAIST OS LAB PINTOS 구현부분의 함수 선언부를 참고하였다[Ref]. 
 
 [Ref]https://oslab.kaist.ac.kr/wp-content/uploads/esos_files/courseware/undergraduate/PINTOS/10_Multi-Level_Feedback_Queue_Scheduler.pdf 
 
@@ -346,7 +346,7 @@ Nice 값은 다음과 같이 set 되고 get 된다. nice 값이 바뀌면 필연
         }
     }
 
-마지막으로, alarm 인터럽트가 발생할 떄마다, 적절한 순간에 위에 서술한 함수를 호출하여 recent_cpu, load_avg 그리고 priority를 업데이트 해야한다. 이때 틱당 현재 실행되는 스레드의 recent_cpu값이 1씩 증가하고 4틱당 현재 스레드의 priority를 계산하여 기존에 계산해논 priority들과 비교후 문맥교환하며, 1초 (Imter_FREQ)가 지날때 마다, load_avg 그리고 전체 스레드의 cpu_recent와 priority를 다시 계산하여 전체적인 Advanced Scheduler 를 구현하게 된다. 주의해야 할 점은 recent_cpu가 틱당 1씩 증가하는 것과 TIMER_FREQ마다 다시 계산되는 것을 분리하는 것이었다. 
+마지막으로, alarm 인터럽트가 발생할 떄마다, 적절한 순간에 위에 서술한 함수를 호출하여 recent_cpu, load_avg 그리고 priority를 업데이트 해야한다. 이때 틱당 현재 실행되는 스레드의 recent_cpu값이 1씩 증가하고 4틱당 현재 스레드의 priority를 계산하여 기존에 계산해둔 priority들과 비교후 문맥교환한다. 마지막으로, 1초 (Imter_FREQ)가 지날때 마다, load_avg 그리고 전체 스레드의 cpu_recent와 priority를 다시 계산하여 전체적인 Advanced Scheduler 를 구현하게 된다. 주의해야 할 점은 recent_cpu가 틱당 1씩 증가하는 것과 TIMER_FREQ마다 다시 계산되는 것을 분리하는 것이었다. 
 
     static void timer_interrupt (struct intr_frame *args UNUSED)
     {
