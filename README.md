@@ -5,6 +5,8 @@
 ## Implementing Alarm Clock
 
 ## Implementing Priority Scheduling
+
+
 ### Requirement 1: implementing priority scheduling
 #### Problem Definition
 현재 pintos는 priority에 대한 고려를 하지 않고 ready queue에 순서대로 저장하고 사용한다. 이 경우 스레드가 우선순위에 상관없이 실행되어 비효율적이다. 따라서 스레드의 우선순위에 따라 실행 순서가 결정되도록 ready queue에 대기시켜줄 필요성이 있다.
@@ -23,7 +25,43 @@
 우선순위에 따라 L, M, H 스레드가 존재한다고 가정한다. 스레드 L이 처음에 lock A를 요청해 보유하고 있다. M이 lock B를 요청하고, 작업하는 과정에서 lock A를 요청한다. 이후 H가 lock B를 요청한면 Nested Donation의 경우에 해당한다. 시간 순서대로 보면, 처음 L이 lock A를 가지고 있고, M이 lock B를 가지고 있는 상황에서 lock A를 요청하고, H가 lock B를 요청한 상황이다. 이 경우, M이 lock A를 요청하는 상황에서 첫번째 priority donation이 발생한다. 이에 따라 M의 priority가 L에게 양보된다. 이후 H가 lock B를 요청할 때 두번째 priority donation이 발생한다. 이때 L은 H의 priority를 가지게 된다. L이 lock A를 반환하게 되면 L의 priority가 M으로 양보된다. M이 lock B를 반환하게 되면 다시 L이 자신의 priority를 회수하게 되고, H가 실행되게 된다.
 
 #### Implementation
+우선순위를 저장할 struct thread 내 자료구조 선언
 
+'''
+struct thread{
+…
+int init_priority;                  // 스레드의 원래 priority 저장
+struct lock *wait_on_lock;          // 스레드가 대기중인 lock의 자료구조 저장
+struct list donations;              // 스레드에 양보된 priority값들 저장
+…
+}
+'''
+
+lock_aquire에서 mlfqs가 아니고 lock의 holder가 존재할 때 priority donation이 일어나도록 설정
+'''
+lock_acquire (struct lock *lock)
+{
+  ASSERT (lock != NULL);
+  ASSERT (!intr_context ());
+  ASSERT (!lock_held_by_current_thread (lock));
+  
+  if(thread_mlfqs == false) {
+    struct thread *curr_thread = thread_current();
+    if(lock->holder != NULL){
+      donate_priority(lock);
+    }
+    curr_thread->wait_on_lock = lock;
+    sema_down (&lock->semaphore);
+    lock->holder = thread_current ();
+    curr_thread->wait_on_lock = NULL;
+    list_push_back(&curr_thread->donations, &lock->elem);
+  } else {
+    sema_down(&lock->semaphore);
+    lock->holder = thread_current();
+  }
+  
+}
+'''
 
 ## Implementing Advanced Scheduler
 ### Problem Definition
