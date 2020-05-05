@@ -3,9 +3,208 @@
 
 # HW 2
 ## Implementing Alarm Clock
+### Problem Definition
+현재 timer_sleep 내부는 busy waiting으로 구현되어 스레드가 작동중이지 않을 때에도 리소스를 많이 필요로 해 비효율적이다. 이를 깨우는 시간을 매 시간 체크하지 않고 정확히 스레드가 요구로 하는 시간에 깨우는 함수를 만들어 해결해야 한다.
 
+### Algorithm Design
+먼저, 스레드를 계속체크하지 않고 깨우기 위해 sleeping_list를 만든다. 스레드가 sleeping_list에 저장되면, 해당 스레드는 작동하지 않는 상태로 간주되어 매 시간 tick을 체크하지 않는다. 스레드가 sleeping_list에 들어가 있는 동안에는 block을 시켜 더이상 실행되지 않도록 막아놓는다.
+
+### Implementation
+먼저, 스레드마다 깨어날 정보를 담는 변수 wake_time을 선언한다.
+
+    struct thread{
+        ...
+        uint64_t wake_time;     //스레드를 깨울 tick을 저장
+        ...
+    }
+
+sleeping_list를 선언하고, thread가 sleep 상태가 될 때마다 sleeping_list에 저장한다. 저장된 스레드는 block되도록 한다.
+
+    void thread_sleep(int64_t t)
+    {
+        struct thread* cur = thread_current();
+        enum intr_level old_level;
+
+        ASSERT(!intr_context());
+
+        old_level = intr_disable();
+        // for idle thread blocking must be ignored
+        if(cur != idle_thread) {
+            cur->wake_time = t;
+            list_insert_ordered(&sleeping_list, &cur->elem, thread_order_sleep, 0);
+            thread_block();
+        }   
+        intr_set_level(old_level);
+    }
+
+일정 tick이 지난 후 sleeping_list에서 스레드를 빼고 
 ## Implementing Priority Scheduling
-현재 pintos는 priority에 대한 고려를 하지 않고 ready queue에 순서대로 저장하고 사용한다. 이를 해결하기 위해 thread끼리의 priority를 비교하는 함수를 만든다.
+### Requirement 1: implementing priority scheduling
+#### Problem Definition
+현재 pintos는 priority에 대한 고려를 하지 않고 ready queue에 순서대로 저장하고 사용한다. 이 경우 스레드가 우선순위에 상관없이 실행되어 비효율적이다. 따라서 스레드의 우선순위에 따라 실행 순서가 결정되도록 ready queue에 대기시켜줄 필요성이 있다.
+
+#### Algorithm Design
+ready queue에 스레드를 삽입할 때 우선순위가 정렬되어 삽입되도록 수정한다. ready queue에서 현재 cpu를 점유하고 있는 스레드의 우선순위보다 높은 스레드가 존재한다면 cpu를 양보해야 한다. ready queue에 스레드가 저장되는 것은 스레드가 unblock될 때와 yield될 때이다. 따라서 unblock에서 리스트의 뒤로 스레드를 삽입하는 부분을 list_insert_ordered로 변경해 정렬되어 삽입되도록 한다.
+
+#### Implementation
+먼저, 스레드의 우선순위를 비교하는 함수를 만든다.
+
+    bool thread_order_priority(const struct list_elem* a,const struct list_elem* b, void *aux UNUSED) {
+        return list_entry(a, struct thread, elem)->priority > list_entry(b, 
+                                                                struct thread, elem)->priority;
+    }
+    
+이 함수를 이용해 unblock 또는 yield되어 ready queue에 들어갈 때마다 정렬되어 들어가도록 한다.
+
+    void thread_unblock (struct thread *t) 
+    {
+        enum intr_level old_level;  
+        ASSERT (is_thread (t));
+        old_level = intr_disable ();
+        ASSERT (t->status == THREAD_BLOCKED);
+        list_insert_ordered (&ready_list, &t->elem, thread_order_priority, 0);
+        t->status = THREAD_READY;
+        intr_set_level (old_level);
+    }
+
+    void thread_yield (void) 
+    {
+        struct thread *cur = thread_current ();
+        enum intr_level old_level;
+  
+        ASSERT (!intr_context ());
+        old_level = intr_disable ();
+        if (cur != idle_thread) 
+            list_insert_ordered (&ready_list, 
+                                    &cur->elem, thread_order_priority, 0);
+        cur->status = THREAD_READY;
+        schedule ();
+        intr_set_level (old_level);
+    }
+
+현재 cpu를 점유중인 스레드와 priority를 비교해 더 높으 스레드가 대기중이면 양보하도록 하는 thread_test_priority를 만든다. 이 함수는 thread_create와 thread_set_priority 함수 내부에서 호출되도록 한다.
+
+    void thread_test_priority(void) {
+        enum intr_level old_level;
+        old_level = intr_disable();
+        struct thread* cur = thread_current();
+
+        if(!list_empty(&ready_list) && cur->priority  < list_entry(list_front(&ready_list), 
+                                                                    struct thread, elem)->priority) {
+            thread_yield();
+        }
+        intr_set_level(old_level);
+    }
+
+
+### Requirement2 : implementing priority donation
+#### Problem Definition
+운영체제에서는 스레드 간 공유되는 데이터를 읽고 쓸 때 충돌을 방지하기 위해 lock이 존재한다. 따라서 데이터에 접근해 쓰는 권한은 lock을 가지고 있는 스레드에 제한된다. 하지만 우선순위가 낮은 스레드(L)가 이미 lock을 가져간 상황에서 우선순위가 높은 스레드(H)가 lock을 요청하는 경우, H는 priority scheduling의 경우와 다르게 나중에 실행될 필요가 있다. 이를 위해 H는 일시적으로 자신의 높은 우선순위를 L에게 양보해 먼저 실행되도록 해야 한다.
+
+#### Algorithm Design
+1. Multiple Donation
+우선순위에 따라 L, M, H 스레드가 존재한다고 가정한다. 한 스레드가 두개 이상의 lock을 가지게 되면, 각 lock마다 donation이 발생 가능하다. 즉, 한 스레드에 양보되는 우선순위게 여러개 발생하게 된다. 이를 위해 양보되는 우선순의들을 저장하는 자료구조를 스레드 구조체 내에 새로 만들고, 양보되는 우선순위의 크기들을 비교해 현재의 우선순위를 결정한다. 예를 들어, 스레드 L이 lock A와 B를 보유하고 있고, M과 H가 각각 A와 B를 요청하는 경우, L은 H의 priority를 갖게 된다. 이 priority는 스레드 L이 작업을 마치고 lock B를 포기함에 따라 M의 priority로 강등되고, 최종적으로 lock A마저 포기하게 되면 자신의 priority로 돌아와야 한다.
+2. Nested Donation
+우선순위에 따라 L, M, H 스레드가 존재한다고 가정한다. 스레드 L이 처음에 lock A를 요청해 보유하고 있다. M이 lock B를 요청하고, 작업하는 과정에서 lock A를 요청한다. 이후 H가 lock B를 요청한면 Nested Donation의 경우에 해당한다. 시간 순서대로 보면, 처음 L이 lock A를 가지고 있고, M이 lock B를 가지고 있는 상황에서 lock A를 요청하고, H가 lock B를 요청한 상황이다. 이 경우, M이 lock A를 요청하는 상황에서 첫번째 priority donation이 발생한다. 이에 따라 M의 priority가 L에게 양보된다. 이후 H가 lock B를 요청할 때 두번째 priority donation이 발생한다. 이때 L은 H의 priority를 가지게 된다. L이 lock A를 반환하게 되면 L의 priority가 M으로 양보된다. M이 lock B를 반환하게 되면 다시 L이 자신의 priority를 회수하게 되고, H가 실행되게 된다.
+
+#### Implementation
+우선순위를 저장할 struct thread 내 자료구조 선언
+
+    struct thread{
+      …
+      int init_priority;                  // 스레드의 원래 priority 저장
+      struct lock *wait_on_lock;          // 스레드가 대기중인 lock의 자료구조 저장
+      struct list donations;              // 스레드에 양보된 priority값들 저장
+      …
+    }
+
+자신의 priority를 양보하는 함수 donate priority를 구현. 이 함수는 lock을 기다리는 스레드가 있을 경우 재귀적으로 호출됨.
+
+    void donate_priority(struct lock *lock){
+        ASSERT(lock != NULL);
+        ASSERT(lock->holder != NULL);
+
+        if (thread_current ()->priority > lock->holder->priority){
+            lock->holder->priority = thread_current()->priority;
+            if(lock->holder->wait_on_lock != NULL){
+                donate_priority(lock->holder->wait_on_lock);
+            }
+        }
+    }
+
+lock_aquire에서 mlfqs가 아니고 lock의 holder가 존재할 때 priority donation이 일어나도록 설정
+
+    lock_acquire (struct lock *lock)
+    {
+      ASSERT (lock != NULL);
+      ASSERT (!intr_context ());
+      ASSERT (!lock_held_by_current_thread (lock));
+  
+      if(thread_mlfqs == false) {
+        struct thread *curr_thread = thread_current();
+        if(lock->holder != NULL){
+          donate_priority(lock);
+        }
+        curr_thread->wait_on_lock = lock;
+        sema_down (&lock->semaphore);
+        lock->holder = thread_current ();
+        curr_thread->wait_on_lock = NULL;
+        list_push_back(&curr_thread->donations, &lock->elem);
+      } else {
+        sema_down(&lock->semaphore);
+        lock->holder = thread_current();
+      }
+    }
+
+lock_release에서 lock 스레드 대기열에서 release와 동시에 제거하고 priority를 초기화하도록 설정한다. priority를 초기화하는 함수를 만든다.
+
+    int refresh_priority(void){
+        int initial_priority = thread_current()->init_priority;
+        struct list *list = &thread_current()->donations;
+        if(list_empty(list)){
+            return initial_priority;
+        }
+
+        struct list_elem *e;
+        for (e = list_begin (list); e != list_end (list); e = list_next (e)){
+            struct semaphore *sema = &list_entry(e, struct lock, elem)->semaphore;
+            if (!list_empty (&sema->waiters))
+            {
+                int temp_priority = list_entry (list_begin (&sema->waiters),
+                                          struct thread, elem)->priority;
+                if (temp_priority > initial_priority)
+                    initial_priority = temp_priority;
+            }
+        }
+        return initial_priority;
+    }
+ 
+ thread_set_priority와 thread_get_priority를 구현해 donation이 일어날 때마다 priority들을 비교해 현재의 priority를 갱신한다.
+ 
+    void thread_set_priority (int new_priority) 
+    {
+        if(thread_mlfqs == false) {
+            struct thread *curr_thread = thread_current();
+            int priority = curr_thread->priority;
+            if(curr_thread->priority==curr_thread->init_priority || new_priority > priority){
+                curr_thread->priority = new_priority;
+            }
+            curr_thread->init_priority = new_priority;
+            if(priority > curr_thread->priority){
+                thread_test_priority();
+            }
+        }
+        else{
+            thread_current ()->priority = new_priority;
+            thread_test_priority();
+        }
+    }
+    int thread_get_priority (void) 
+    {
+        return thread_current ()->priority;
+    }
+
+
 
 ## Implementing Advanced Scheduler
 ### Problem Definition
