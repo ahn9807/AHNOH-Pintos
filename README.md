@@ -225,3 +225,148 @@ $$load\_avg=(59/60)*load\_avg + (1/60)*ready\_threads$$
 5. 실수의 계산
 운영체제에서는 속도상의 문제와 구현의 복잡성때문에 실수의 계산은 커널상에서 제공하지 않는다. 따라서 실수의 계산은 직접 구현해야만 한다. 그러나 pintos에서는 실수의 계산에 대한 가이드라인을 제공하고 있기에, 그에따라 만들면 별 문제 없이 처리 할 수 있다.
 ### Implementation
+실수의 계산은 pintos 에서 제공하지 않는다. 따라서 직접 구현해야 한다. 따로 헤더파일과 소스파일을 만드는 방법도 있지만, 구현의 편의성을 위해서 thread.c에 직접 전처리기를 이용하여 정의하였다. 
+
+    #define F 16384
+    #define REAL_TO_INT(x) ((x) / F)
+    #define INT_TO_REAL(n) ((n) * F)
+    #define REAL_TO_INT_ROUND(x) ((x) >= 0 ? (((x) + F/2))/F : (((x) - F/2))/F)
+    #define ADD_REAL(x,y) ((x) + (y))
+    #define SUBTRACT_REAL(x,y) ((x) - (y))
+    #define ADD_REAL_INT(x,n) ((x) + (n)*F)
+    #define SUBTRACT_REAL_INT(x,n) ((x) - (n)*F)
+    #define MUL_REAL(x,y) (((int64_t) (x)) * (y) /F)
+    #define MUL_REAL_INT(x,n) ((x) * (n))
+    #define DIV_REAL(x,y) (((int64_t) (x)) * F / (y))
+    #define DIV_REAL_INT(x,n) ((x)/n)
+
+nice, recent_cpu 그리고 load_avg는 각각 초기값이 정의되어야 한다. 모두 0으로 초기화 한다. 그러나 load_avg는 모든 스레드가 공유하는 것이기 떄문에, thread_start 에서 정의하고, nice와 recent_cpu는 스레드가 처음 만들어 질때 혹은 스레드가 부모스레드를 상속받을때 각각 초기화 되고 부모 스레드의 nice와 recent_cpu를 가져오도록 구현해야 한다. 
+
+    void thread_init (void) 
+    {
+        ...
+
+        initial_thread->nice = DEFAULT_NICE;
+        initial_thread->recent_cpu = DEFAULT_RECENT_CPU;
+    }
+
+    void thread_start (void) 
+    {
+        ...
+
+        load_average = DEAFULT_AVG_LOAD;
+
+        ...
+    }
+
+    init_thread (struct thread *t, const char *name, int priority)
+    {
+        ...
+
+        t->nice = running_thread()->nice;
+        t->recent_cpu = running_thread()->recent_cpu;
+        
+        ...
+    }
+
+Nice 값은 다음과 같이 set 되고 get 된다. nice 값이 바뀌면 필연적으로 priority도 바뀌기 떄문에, nice 값이 변경되는 것과 동시에 priority를 업데이트 해주어야 한다. 
+
+    void thread_set_nice (int nice) 
+    { 
+        intr_disable();
+        struct thread* t = thread_current();
+        t->nice = nice;
+        if(idle_thread != t) {
+            t->priority = PRI_MAX - REAL_TO_INT_ROUND((t->recent_cpu/4)) - t->nice * 2;
+        }
+
+        if(t->priority > PRI_MAX) {
+            t->priority = PRI_MAX;
+        } else if(t->priority < PRI_MIN) {
+            t->priority = PRI_MIN;
+        }
+        if(!list_empty(&ready_list) && thread_current()->priority  < list_entry(list_front(&ready_list), struct thread, elem)->priority) {
+            thread_yield();
+        }
+        intr_enable();
+    }
+
+    /* Returns the current thread's nice value. */
+    int thread_get_nice (void) 
+    {
+        return thread_current()->nice;
+    }
+
+스레드들을 적절히 동적으로 스케쥴링 하기 위해서는 recent_cpu, load_avg 그리고 priority를 적절한 틱당 업데이트 해주어야 한다. 그들 각각의 설명은 위에 있는 대로 구현하면 된다. 여기서 주의해야 할점은, priority를 clamp 하는 것과 채점상의 문제로 인하여 각각의 함수를 호출하는 것을 pintos document에 나와있는 대로 정확히 서술하여야 한다는 점이다. 또한 수식에 있어서 실수와 정수의 확실한 구분과 정확한 실수 계산 함수의 구현이 있었다. 많은 구현방법이 있을 수 있겠지만, 전체적인 개념을 이해한 후, 기본적인 함수의 뼈대는 KAIST OS LAB PINTOS 구현부분의 함수 선언부를 참고하였다[Ref]. 
+
+[Ref]https://oslab.kaist.ac.kr/wp-content/uploads/esos_files/courseware/undergraduate/PINTOS/10_Multi-Level_Feedback_Queue_Scheduler.pdf 
+
+    void mlfqs_priority(struct thread *t) {
+        if(idle_thread != t) {
+            t->priority = PRI_MAX - REAL_TO_INT_ROUND((t->recent_cpu/4)) - t->nice * 2;
+        }
+
+        if(t->priority > PRI_MAX) {
+            t->priority = PRI_MAX;
+        } else if(t->priority < PRI_MIN) {
+            t->priority = PRI_MIN;
+        }
+        if(!list_empty(&ready_list) && thread_current()->priority  < list_entry(list_front(&ready_list), struct thread, elem)->priority) {
+            intr_yield_on_return();
+        }
+    }
+
+    void mlfqs_recent_cpu(struct thread *t) {
+        if(idle_thread != t) {
+            t->recent_cpu = ADD_REAL_INT(MUL_REAL(DIV_REAL(MUL_REAL_INT(load_average , 2), ADD_REAL_INT(MUL_REAL_INT(load_average, 2),1)), t->recent_cpu), t->nice);
+        }
+    }
+
+    void mlfqs_load_avg(void) {
+        int ready_thread_size = (int)list_size(&ready_list) + (thread_current() != idle_thread ? 1 : 0);
+        load_average = ADD_REAL(MUL_REAL(DIV_REAL(59,60), load_average), MUL_REAL_INT(DIV_REAL(1,60), ready_thread_size));
+    }
+
+    void mlfqs_increment(void) {
+        if(idle_thread != thread_current()) {
+            thread_current()->recent_cpu = ADD_REAL_INT(thread_current()->recent_cpu, 1);
+        }
+    }
+
+    void mlfqs_recalc_cpu_priority(void) {
+        struct list_elem* e;
+
+        ASSERT (intr_get_level () == INTR_OFF);
+
+        for(e = list_begin(&all_list); e != list_end(&all_list); e = list_next(e)) {
+            //printf("0x%x\n", e);
+            struct thread *t = list_entry(e, struct thread, allelem);
+            mlfqs_recent_cpu(t);
+            mlfqs_priority(t);
+        }
+    }
+
+마지막으로, alarm 인터럽트가 발생할 떄마다, 적절한 순간에 위에 서술한 함수를 호출하여 recent_cpu, load_avg 그리고 priority를 업데이트 해야한다. 이때 틱당 현재 실행되는 스레드의 recent_cpu값이 1씩 증가하고 4틱당 현재 스레드의 priority를 계산하여 기존에 계산해논 priority들과 비교후 문맥교환하며, 1초 (Imter_FREQ)가 지날때 마다, load_avg 그리고 전체 스레드의 cpu_recent와 priority를 다시 계산하여 전체적인 Advanced Scheduler 를 구현하게 된다. 주의해야 할 점은 recent_cpu가 틱당 1씩 증가하는 것과 TIMER_FREQ마다 다시 계산되는 것을 분리하는 것이었다. 
+
+    static void timer_interrupt (struct intr_frame *args UNUSED)
+    {
+        ticks++;
+        thread_awake(ticks);
+
+        if(thread_mlfqs == true) {
+            mlfqs_increment();
+            if(timer_ticks() % TIMER_FREQ == 0) {
+            mlfqs_load_avg();
+            mlfqs_recalc_cpu_priority();
+            } 
+            if(timer_ticks() % 4 == 0) {
+            mlfqs_priority(thread_current());
+            }
+        }
+
+        thread_tick ();
+    }
+
+
+<script type="text/javascript" src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+<script type="text/x-mathjax-config"> MathJax.Hub.Config({ tex2jax: {inlineMath: [['$', '$']]}, messageStyle: "none" });</script>
