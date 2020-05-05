@@ -202,7 +202,7 @@ thread_create (const char *name, int priority,
   struct switch_entry_frame *ef;
   struct switch_threads_frame *sf;
   tid_t tid;
-  //enum intr_level old_level;
+  enum intr_level old_level;
 
   ASSERT (function != NULL);
 
@@ -218,7 +218,7 @@ thread_create (const char *name, int priority,
   /* Prepare thread for first run by initializing its stack.
      Do this atomically so intermediate values for the 'stack' 
      member cannot be observed. */
-  //old_level = intr_disable ();
+  old_level = intr_disable ();
 
   /* Stack frame for kernel_thread(). */
   kf = alloc_frame (t, sizeof *kf);
@@ -235,13 +235,13 @@ thread_create (const char *name, int priority,
   sf->eip = switch_entry;
   sf->ebp = 0;
 
-  //intr_set_level (old_level);
+  intr_set_level (old_level);
 
   /* Add to run queue. */
   thread_unblock (t);
+
   if (t->priority > thread_get_priority ())
     thread_yield ();
-  // thread_test_priority();
 
   return tid;
 }
@@ -332,7 +332,7 @@ thread_exit (void)
      and schedule another process.  That process will destroy us
      when it calls thread_schedule_tail(). */
   intr_disable ();
-  //list_remove (&thread_current()->allelem);
+  list_remove (&thread_current()->allelem);
   thread_current ()->status = THREAD_DYING;
   schedule ();
   NOT_REACHED ();
@@ -462,20 +462,16 @@ void mlfqs_increment(void) {
   }
 }
 void mlfqs_recalc_cpu_priority(void) {
-  enum intr_level old_level;
-
-  ASSERT(intr_get_level() == INTR_OFF);
-
-  old_level = intr_disable();
-
   struct list_elem* e;
 
+  ASSERT (intr_get_level () == INTR_OFF);
+
   for(e = list_begin(&all_list); e != list_end(&all_list); e = list_next(e)) {
+    //printf("0x%x\n", e);
     struct thread *t = list_entry(e, struct thread, allelem);
     mlfqs_recent_cpu(t);
     mlfqs_priority(t);
   }
-  intr_set_level(old_level);
 }
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
@@ -505,6 +501,7 @@ thread_get_priority (void)
 void
 thread_set_nice (int nice) 
 { 
+  intr_disable();
   struct thread* t = thread_current();
   t->nice = nice;
   if(idle_thread != t) {
@@ -519,6 +516,7 @@ thread_set_nice (int nice)
   if(!list_empty(&ready_list) && thread_current()->priority  < list_entry(list_front(&ready_list), struct thread, elem)->priority) {
     thread_yield();
   }
+  intr_enable();
 }
 
 /* Returns the current thread's nice value. */
