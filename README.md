@@ -10,7 +10,34 @@
 먼저, 스레드를 계속체크하지 않고 깨우기 위해 sleeping_list를 만든다. 스레드가 sleeping_list에 저장되면, 해당 스레드는 작동하지 않는 상태로 간주되어 매 시간 tick을 체크하지 않는다. 스레드가 sleeping_list에 들어가 있는 동안에는 block을 시켜 더이상 실행되지 않도록 막아놓는다.
 
 ### Implementation
+먼저, 스레드마다 깨어날 정보를 담는 변수 wake_time을 선언한다.
 
+    struct thread{
+        ...
+        uint64_t wake_time;     //스레드를 깨울 tick을 저장
+        ...
+    }
+
+sleeping_list를 선언하고, thread가 sleep 상태가 될 때마다 sleeping_list에 저장한다. 저장된 스레드는 block되도록 한다.
+
+    void thread_sleep(int64_t t)
+    {
+        struct thread* cur = thread_current();
+        enum intr_level old_level;
+
+        ASSERT(!intr_context());
+
+        old_level = intr_disable();
+        // for idle thread blocking must be ignored
+        if(cur != idle_thread) {
+            cur->wake_time = t;
+            list_insert_ordered(&sleeping_list, &cur->elem, thread_order_sleep, 0);
+            thread_block();
+        }   
+        intr_set_level(old_level);
+    }
+
+일정 tick이 지난 후 sleeping_list에서 스레드를 빼고 
 ## Implementing Priority Scheduling
 ### Requirement 1: implementing priority scheduling
 #### Problem Definition
@@ -62,7 +89,8 @@ ready queue에 스레드를 삽입할 때 우선순위가 정렬되어 삽입되
         old_level = intr_disable();
         struct thread* cur = thread_current();
 
-        if(!list_empty(&ready_list) && cur->priority  < list_entry(list_front(&ready_list), struct thread, elem)->priority) {
+        if(!list_empty(&ready_list) && cur->priority  < list_entry(list_front(&ready_list), 
+                                                                    struct thread, elem)->priority) {
             thread_yield();
         }
         intr_set_level(old_level);
