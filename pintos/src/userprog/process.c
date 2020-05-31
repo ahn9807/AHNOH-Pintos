@@ -99,6 +99,11 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
+  int i=0;
+  for(i=0;i<10000000000;i++) {
+    //do nothing
+  }
+
   return -1;
 }
 
@@ -241,11 +246,11 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
    for (token = strtok_r (file_name, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr)) {
      inputs[index++] = token;
-     printf("%s\n",inputs[index - 1]);
    }
 
   /* Open executable file. */
-  file = filesys_open (token[0]);
+
+  file = filesys_open (inputs[0]);
   if (file == NULL) 
     {
       printf ("load: %s: open failed\n", file_name);
@@ -336,6 +341,11 @@ load (const char *file_name, void (**eip) (void), void **esp)
  done:
   /* We arrive here whether the load is successful or not. */
   file_close (file);
+
+  if(success) {
+    setup_stack_argv(esp, index, inputs);
+  }
+
   return success;
 }
 
@@ -467,9 +477,49 @@ setup_stack (void **esp)
   return success;
 }
 
-static bool 
-setup_stack (void **esp, char** argc, char** argv) {
+void setup_stack_argv (void **esp, int argc, char** argv) {
+  int alignment_length = 0;
+  int len = 0;
+  int i=0;
+  // pushing argv to esp
+  for(i=argc - 1; i >= 0; i--) {
+    len = strlen(argv[i]);
+    // 1 for null pointer sentinel
+    *esp -= len + 1;
+    memcpy(*esp, argv[i], len + 1);
+    argv[i] = *esp;
+    alignment_length += len + 1;
+  }
+  // memory alignment
+  int rest = alignment_length % 4;
+  if(rest == 0) {
+    //do nothing
+  } else {
+    *esp -= 4 - rest;
+  }
   
+  //push null
+  *esp -= 4;
+    *(uint32_t **)*esp = 0;
+
+  //push argv[i] address
+  for(i=argc - 1; i >= 0; i--) {
+    // 1 for null pointer sentinel
+    *esp -= 4;
+    *(uint32_t **)*esp = argv[i];
+  }
+
+  //push argv address
+  *esp -=4;
+  *(uint32_t **)*esp = *esp + 4;
+
+  //push argc
+  *esp -=4;
+  *(uint32_t **)*esp = argc;
+
+  //push return address (namely 0)
+  *esp -=4;
+  *(uint32_t **)*esp = 0;
 }
 
 /* Adds a mapping from user virtual address UPAGE to kernel
