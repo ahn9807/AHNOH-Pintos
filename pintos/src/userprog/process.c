@@ -38,8 +38,19 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
+  char programe_name[256];
+  int index = 0;
+  char* last = file_name[0];
+
+  while(last != '\0' && last != ' ') {
+    programe_name[index] = file_name[index];
+    last = file_name[index];
+    index++;
+  }
+  programe_name[index - 1] = '\0';
+
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (programe_name, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
   return tid;
@@ -114,6 +125,8 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+
+    printf("%s: exit(%d)\n", cur->name, cur->status);
 }
 
 /* Sets up the CPU for running user code in the current
@@ -221,8 +234,18 @@ load (const char *file_name, void (**eip) (void), void **esp)
     goto done;
   process_activate ();
 
+  char* inputs[256];
+
+   char *token, *save_ptr;
+   int index = 0;
+
+   for (token = strtok_r (file_name, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr)) {
+     inputs[index++] = token;
+     printf("%s\n",inputs[index - 1]);
+   }
+
   /* Open executable file. */
-  file = filesys_open (file_name);
+  file = filesys_open (token[0]);
   if (file == NULL) 
     {
       printf ("load: %s: open failed\n", file_name);
@@ -442,6 +465,11 @@ setup_stack (void **esp)
         palloc_free_page (kpage);
     }
   return success;
+}
+
+static bool 
+setup_stack (void **esp, char** argc, char** argv) {
+  
 }
 
 /* Adds a mapping from user virtual address UPAGE to kernel
