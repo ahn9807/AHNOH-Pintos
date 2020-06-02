@@ -99,7 +99,7 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-  while(1);
+  while(true);
 
   return -1;
 }
@@ -341,7 +341,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
   if(success) {
     setup_stack_argv(esp, index, inputs);
-    //hex_dump(*esp, *esp, 100, 1);
+    hex_dump(*esp, *esp, 100, 1);
   }
 
   return success;

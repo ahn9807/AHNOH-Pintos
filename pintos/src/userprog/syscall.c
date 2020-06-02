@@ -18,7 +18,7 @@ syscall_handler (struct intr_frame *f UNUSED)
   uint32_t* esp = f->esp;
   check_address(esp);
   int arg[100];
-  //get_argument(f->esp, arg, 4);
+  hex_dump(f->esp, f->esp, 1000, 1);
   switch (*esp)
   {
   case SYS_HALT:
@@ -33,7 +33,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 }
 
 void check_address(void *addr) {
-  if((uint32_t)0x8048000 < (uint32_t)&addr || (uint32_t)0xc0000000 > (uint32_t)&addr) {
+  if((uint32_t)0x8048000 > (uint32_t *)addr || (uint32_t)0xc0000000 < (uint32_t *)addr) {
     printf("Out of user memory area [0x%x]!\n", (uint32_t *)addr);
     exit(-1);
   }
@@ -44,8 +44,8 @@ void get_argument(void *esp, int *arg, int count) {
   uint32_t* base_esp = esp;
   for(i=0;i<count;i++) {
     arg[i] = (uint32_t *)base_esp;
-    base_esp += 4;
-    printf("%d\n",arg[i]);
+    //printf("[%x] ", base_esp);
+    base_esp += 1;
   }
 }
 
