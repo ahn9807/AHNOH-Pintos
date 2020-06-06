@@ -110,6 +110,61 @@ static tid_t allocate_tid (void);
 
    It is not safe to call thread_current() until this function
    finishes. */
+
+void init_file_struct(struct thread* td) {
+  td->file_struct_size = 3;
+  td->file[0] = STDIN;
+  td->file[1] = STDOUT;
+  td->file[2] = STDERR;
+}
+
+int insert_file(struct file* f) {
+  if(thread_current()->file_struct_size < MAX_FILE_SIZE) {
+    thread_current()->file[thread_current()->file_struct_size++] = f;
+    //printf("fs: %d\n",thread_current()->file_struct_size);
+    return thread_current()->file_struct_size-1;
+  } else {
+    return -1;
+  }
+}
+
+void remove_file(struct file* f) {
+  int i=0;
+  int j = 0;
+  struct thread* tc = thread_current();
+  if(thread_current()->file_struct_size > 0) {
+    //Searching file
+    for(i=0;i<tc->file_struct_size;i++) {
+      if(f == file_from_fd(i)) {
+        //if find remove from list
+        for(j = i ; j < tc->file_struct_size - 1; j++) {
+          tc->file[j] = tc->file[j+1];
+        }
+        break;
+      }
+    }
+    //decrease size
+    tc->file_struct_size--;
+  } else {
+    return;
+  }
+}
+
+struct file* file_from_fd(int fd) {
+  if(fd >= 0 && fd < thread_current()->file_struct_size) {
+    return thread_current()->file[fd];
+  } else {
+    return NULL;
+  }
+}
+
+void debug_file_struct() {
+  int i=0;
+  for(i=0;i<thread_current()->file_struct_size;i++) {
+    printf("[%d] 0x%x\n", i, thread_current()->file[i]);
+  }
+}
+
 void
 thread_init (void) 
 {
@@ -635,6 +690,8 @@ init_thread (struct thread *t, const char *name, int priority)
   list_init(&t->donations);
   t->init_priority = priority;
   t->wait_on_lock = NULL;
+
+  init_file_struct(t);
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and

@@ -4,6 +4,8 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#include "filesys/filesys.h"
+#include "filesys/file.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -23,6 +25,11 @@ typedef int tid_t;
 #define PRI_MIN 0                       /* Lowest priority. */
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
+#define MAX_FILE_SIZE 256
+
+#define STDIN 0
+#define STDOUT 1
+#define STDERR 2
 
 /* A kernel thread or user process.
 
@@ -96,6 +103,9 @@ struct thread
     uint64_t wake_time;                 /* for implementing sleep */
     int nice;
     int recent_cpu;
+    //흠.. 프로세스에 위치해야 할 것 같긴 한뎅...
+    struct file* file[MAX_FILE_SIZE];
+    int file_struct_size;
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
@@ -113,6 +123,12 @@ struct thread
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
 extern bool thread_mlfqs;
+
+int insert_file(struct file* f);
+void remove_file(struct file* f);
+void init_file_struct();
+struct file* file_from_fd(int fd);
+void debug_file_struct();
 
 void thread_init (void);
 void thread_start (void);

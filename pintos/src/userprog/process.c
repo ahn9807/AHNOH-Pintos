@@ -53,6 +53,7 @@ process_execute (const char *file_name)
   tid = thread_create (programe_name, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
+        
   return tid;
 }
 
@@ -99,8 +100,10 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-  while(true);
-
+  while(true) {
+    thread_yield();
+  }
+  
   return -1;
 }
 
@@ -127,8 +130,6 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
-
-    printf("%s: exit(%d)\n", cur->name, cur->status);
 }
 
 /* Sets up the CPU for running user code in the current
@@ -242,6 +243,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
    int index = 0;
 
    for (token = strtok_r (file_name, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr)) {
+     //printf("t: %s\n",token);
      inputs[index++] = token;
    }
 
@@ -341,7 +343,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
   if(success) {
     setup_stack_argv(esp, index, inputs);
-    hex_dump(*esp, *esp, 100, 1);
+    //hex_dump(*esp, *esp, 100, 1);
   }
 
   return success;

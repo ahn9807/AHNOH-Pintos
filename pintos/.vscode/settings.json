@@ -1,5 +1,8 @@
 {
     "files.associations": {
-        "chrono": "c"
+        "chrono": "c",
+        "ostream": "c",
+        "__cxx_version": "c",
+        "algorithm": "c"
     }
 }

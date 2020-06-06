@@ -60,6 +60,10 @@ file_get_inode (struct file *file)
   return file->inode;
 }
 
+void file_set_inode(struct file *file, struct inode *inode) {
+  file->inode = inode;
+}
+
 /* Reads SIZE bytes from FILE into BUFFER,
    starting at the file's current position.
    Returns the number of bytes actually read,
