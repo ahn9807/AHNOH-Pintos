@@ -4,6 +4,8 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "devices/input.h"
+
+struct lock filesys_lock;
 #include "filesys/file.h"
 #include "filesys/filesys.h"
 #include "filesys/directory.h"
@@ -113,6 +115,8 @@ void halt(void) {
 }
 
 void exit(int status) {
+	struct thread* t = thread_current();
+	t->exit = status;
   printf("%s: exit(%d)\n", thread_current()->name, status);
   thread_exit();
 }
@@ -123,6 +127,7 @@ int exec(const char *cmd_line) {
 }
 
 int wait (int pid) {
+	
   return process_wait(pid);
 }
 
@@ -152,7 +157,7 @@ int open (const char *file) {
   int returnVal;
   lock_acquire(&file_lock);
   file_pointer = filesys_open(file);
-  printf("0x%x\n", file_pointer);
+  //printf("0x%x\n", file_pointer);
   returnVal = insert_file(file_pointer);
   //printf("[%d] 0x%x\n", 3, file_from_fd(3));
   lock_release(&file_lock);

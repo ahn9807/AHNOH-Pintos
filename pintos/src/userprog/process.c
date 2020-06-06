@@ -51,10 +51,47 @@ process_execute (const char *file_name)
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (programe_name, PRI_DEFAULT, start_process, fn_copy);
-  if (tid == TID_ERROR)
+	//printf("tid created\n");
+  if (tid == TID_ERROR){
     palloc_free_page (fn_copy); 
-        
-  return tid;
+		return tid;
+	}
+
+	//printf("tid %d\n", tid);
+	struct thread *userprogram = find_tid(tid);
+	/*
+	// this part moved into thread.c 
+	// don't know why but could't read tid in process.c T.T
+
+	struct thread *userprogram = NULL;
+	struct list_elem *element = list_begin(&all_list);
+	
+	printf("finding tid\n");
+	while(element!=list_end(&all_list)){
+		printf("while loop.....\n");
+		struct thread *temp = list_entry(element, struct thread, allelem);
+		printf("created temp\n");
+		
+		printf("tem tid %d\n", get_tid(temp));
+		if(temp->tid == tid){
+			printf("found tid\n");
+			userprogram = temp;
+			break;
+		}
+		printf("not found.....\n");
+		element = list_next(element);
+	}*/
+
+	if(userprogram == NULL){
+		//printf("couldn't find userprogram\n");
+		return tid;
+	}
+	else if(userprogram != NULL){
+		//printf("try to push\n");
+		list_push_back(&thread_current()->userprog, &userprogram->userprog_elem);
+	  //printf("pushed\n");
+		return tid;
+	}
 }
 
 /* A thread function that loads a user process and starts it
@@ -100,11 +137,31 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-  while(true) {
-    thread_yield();
-  }
-  
-  return -1;
+	//printf("inside of wait\n");
+  struct list_elem* element = list_begin(&(thread_current()->userprog));
+	struct thread *curr_thread = thread_current();
+	struct thread *userprog = NULL;
+	int return_exit;
+	int is_found = 0; //use int instead of boolean
+
+	while(element != list_end(&(curr_thread->userprog))){
+		//printf("finding the child process\n");
+		curr_thread = list_entry(element, struct thread, userprog_elem);
+		if(child_tid == curr_thread->tid){
+			//printf("wait : found!!!\n");
+			is_found++;
+			return_exit = curr_thread->exit;
+			list_remove(&curr_thread->userprog_elem);
+			sema_down(&(curr_thread->userprog_wait));
+			return return_exit;
+		}
+		element = list_next(element);
+	}
+	//printf("outside of while\n");
+
+	if(is_found==0){
+  	return -1;
+	}
 }
 
 /* Free the current process's resources. */
@@ -130,6 +187,8 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+
+    sema_up(&(thread_current()->userprog_wait));
 }
 
 /* Sets up the CPU for running user code in the current
@@ -162,7 +221,7 @@ typedef uint16_t Elf32_Half;
 #define PE32Hx PRIx16   /* Print Elf32_Half in hexadecimal. */
 
 /* Executable header.  See [ELF1] 1-4 to 1-8.
-   This appears at the very beginning of an ELF binary. */
+   Thi appears at the very beginning of an ELF binary. */
 struct Elf32_Ehdr
   {
     unsigned char e_ident[16];

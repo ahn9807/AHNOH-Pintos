@@ -50,7 +50,7 @@ static struct list sleeping_list;
 
 /* List of all processes.  Processes are added to this list
    when they are first scheduled and removed when they exit. */
-static struct list all_list;
+//static struct list all_list;  <- this list is moved to header file.
 
 /* Idle thread. */
 static struct thread *idle_thread;
@@ -690,6 +690,12 @@ init_thread (struct thread *t, const char *name, int priority)
   list_init(&t->donations);
   t->init_priority = priority;
   t->wait_on_lock = NULL;
+#ifdef USERPROG
+	list_init(&t->userprog);
+	sema_init(&t->userprog_wait, 0);
+	list_push_back(&(running_thread()->userprog), &(t->userprog_elem));
+	t->exit = -1;
+#endif
 
   init_file_struct(t);
 }
@@ -824,6 +830,21 @@ int refresh_priority(void){
         }
     }
   return initial_priority;
+}
+
+struct thread* find_tid(tid_t tid){
+	struct list_elem* element = list_begin(&all_list);
+	struct thread *temp = NULL;
+	struct thread *result = NULL;
+	while(element != list_end(&all_list)){
+		temp = list_entry(element, struct thread, allelem);
+		if(temp->tid == tid){
+			result = temp;
+			break;
+		}
+		element = list_next(element);
+	}
+	return result;
 }
 
 /* Offset of `stack' member within `struct thread'.
