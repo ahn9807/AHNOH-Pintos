@@ -30,6 +30,7 @@ process_execute (const char *file_name)
 {
   char *fn_copy;
   tid_t tid;
+	struct file *f;
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
@@ -37,7 +38,7 @@ process_execute (const char *file_name)
   if (fn_copy == NULL)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
-
+	
   char programe_name[256];
   int index = 0;
   char* last = file_name[0];
@@ -48,6 +49,11 @@ process_execute (const char *file_name)
     index++;
   }
   programe_name[index - 1] = '\0';
+	
+	//f = filesys_open(programe_name);
+
+
+	//file_deny_write(f);
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (programe_name, PRI_DEFAULT, start_process, fn_copy);
@@ -56,7 +62,7 @@ process_execute (const char *file_name)
     palloc_free_page (fn_copy); 
 		return tid;
 	}
-
+	
 	//printf("tid %d\n", tid);
 	struct thread *userprogram = find_tid(tid);
 	/*
@@ -150,10 +156,14 @@ process_wait (tid_t child_tid UNUSED)
 		if(child_tid == curr_thread->tid){
 			//printf("wait : found!!!\n");
 			is_found++;
+			/*
 			return_exit = curr_thread->exit;
 			list_remove(&curr_thread->userprog_elem);
 			sema_down(&(curr_thread->userprog_wait));
-			return return_exit;
+			sema_up(&(curr_thread->userprog_exit));
+			*/
+			//return return_exit;
+			break;
 		}
 		element = list_next(element);
 	}
@@ -162,6 +172,11 @@ process_wait (tid_t child_tid UNUSED)
 	if(is_found==0){
   	return -1;
 	}
+	list_remove(&(curr_thread->userprog_elem));
+	sema_down(&(curr_thread->userprog_wait));
+	return_exit = curr_thread->exit;
+	sema_up(&(curr_thread->userprog_exit));
+	return return_exit;
 }
 
 /* Free the current process's resources. */
@@ -170,7 +185,14 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
-
+	int i=3;
+	
+	/*
+	for(i=3; i<MAX_FILE_SIZE; i++){
+		if(cur->file[i]!=NULL){
+			file_allow_write(cur->file[i]);
+		}
+	}*/
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
@@ -187,8 +209,19 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+		
 
+		struct list_elem *element = list_begin(&(cur->userprog));
+		struct thread *userprogram = NULL;
     sema_up(&(thread_current()->userprog_wait));
+
+		while(element != list_end(&(cur->userprog))){
+			userprogram = list_entry(element, struct thread, userprog_elem);
+			element = list_next(element);
+			sema_down(&(userprogram->userprog_wait));
+			sema_up(&(userprogram->userprog_exit));
+		}
+		sema_down(&(thread_current()->userprog_exit));
 }
 
 /* Sets up the CPU for running user code in the current
@@ -308,7 +341,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
   /* Open executable file. */
 
-  file = filesys_open (inputs[0]);
+  file = filesys_open (file_name);
   if (file == NULL) 
     {
       printf ("load: %s: open failed\n", file_name);
@@ -395,7 +428,8 @@ load (const char *file_name, void (**eip) (void), void **esp)
   *eip = (void (*) (void)) ehdr.e_entry;
 
   success = true;
-
+	file_deny_write(file);
+	insert_file(file);
  done:
   /* We arrive here whether the load is successful or not. */
   file_close (file);

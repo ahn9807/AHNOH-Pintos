@@ -118,7 +118,9 @@ struct thread
    struct list_elem userprog_elem;
    struct list userprog;
    struct semaphore userprog_wait;
+	 struct semaphore userprog_exit;
    int exit;
+	 
 
    /* Owned by thread.c. */
    unsigned magic; /* Detects stack overflow. */

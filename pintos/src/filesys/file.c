@@ -170,3 +170,11 @@ file_tell (struct file *file)
   ASSERT (file != NULL);
   return file->pos;
 }
+
+int file_deny_state(struct file* f) {
+  return f->deny_write;
+}
+
+void file_set_deny_state(struct file* f, int deny) {
+  f->deny_write = deny;
+}
