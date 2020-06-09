@@ -54,6 +54,11 @@ process_execute (const char *file_name)
 
 
 	//file_deny_write(f);
+	if(filesys_open(programe_name)==NULL){
+		return -1;
+	}
+
+	thread_current()->waiting = 0;
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (programe_name, PRI_DEFAULT, start_process, fn_copy);
@@ -149,14 +154,20 @@ process_wait (tid_t child_tid UNUSED)
 	struct thread *userprog = NULL;
 	int return_exit;
 	int is_found = 0; //use int instead of boolean
+	
+	if(find_tid(child_tid)==NULL){
+		return -1;
+	}
 
 	while(element != list_end(&(curr_thread->userprog))){
 		//printf("finding the child process\n");
 		curr_thread = list_entry(element, struct thread, userprog_elem);
+				
 		if(child_tid == curr_thread->tid){
 			//printf("wait : found!!!\n");
-			is_found++;
-			/*
+			is_found = 1;
+			/* //moved to the bottom of this function......
+
 			return_exit = curr_thread->exit;
 			list_remove(&curr_thread->userprog_elem);
 			sema_down(&(curr_thread->userprog_wait));
@@ -169,8 +180,17 @@ process_wait (tid_t child_tid UNUSED)
 	}
 	//printf("outside of while\n");
 
-	if(is_found==0){
+	if(is_found == 0){
   	return -1;
+	}
+
+	//SPENT MY WHOLE DAY TO SOLVE WAIT-TWICE.....
+	//this part solves wait-twice, thread->waiting is initialized in process_execute
+	if(curr_thread->waiting){
+		return -1;
+	}
+	else{
+		curr_thread->waiting = 1;
 	}
 	list_remove(&(curr_thread->userprog_elem));
 	sema_down(&(curr_thread->userprog_wait));
@@ -214,13 +234,6 @@ process_exit (void)
 		struct list_elem *element = list_begin(&(cur->userprog));
 		struct thread *userprogram = NULL;
     sema_up(&(thread_current()->userprog_wait));
-
-		while(element != list_end(&(cur->userprog))){
-			userprogram = list_entry(element, struct thread, userprog_elem);
-			element = list_next(element);
-			sema_down(&(userprogram->userprog_wait));
-			sema_up(&(userprogram->userprog_exit));
-		}
 		sema_down(&(thread_current()->userprog_exit));
 }
 
