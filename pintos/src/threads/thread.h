@@ -22,6 +22,13 @@ enum thread_status
 typedef int tid_t;
 static struct list all_list;
 
+
+struct file_information{
+	struct file *file;
+	int file_descripter;
+	struct list_elem element;
+};
+
 #define TID_ERROR ((tid_t)-1) /* Error value for tid_t. */
 
 /* Thread priorities. */

@@ -98,11 +98,12 @@ process_execute (const char *file_name)
 		//printf("couldn't find userprogram\n");
 		return TID_ERROR;
 	}
-
+	
 	if(userprogram != NULL){
 		//printf("try to push\n");
-		sema_down(&thread_current()->userprog_load);
+		//sema_down(&thread_current()->userprog_load);
 		list_push_back(&thread_current()->userprog, &userprogram->userprog_elem);
+		//sema_down(&thread_current()->userprog_load);
 	  //printf("pushed\n");
 		return tid;
 	}
@@ -217,6 +218,15 @@ process_exit (void)
 			file_allow_write(cur->file[i]);
 		}
 	}*/
+/*
+	struct file_information *f = NULL;
+	struct list_elem *e;
+	if(lock_held_by_current_thread(&file_lock)){
+		lock_release(&file_lock);
+	}
+	for(e = list_begin(&cur->))
+*/
+
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
