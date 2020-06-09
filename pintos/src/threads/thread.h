@@ -122,6 +122,7 @@ struct thread
 	 char *progname;
    int exit;
 	 int waiting;
+   struct semaphore userprog_load;
 
    /* Owned by thread.c. */
    unsigned magic; /* Detects stack overflow. */

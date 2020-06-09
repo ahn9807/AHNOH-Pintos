@@ -22,10 +22,10 @@ static bool put_user (uint8_t *udst, uint8_t byte);
 */
 
 void syscall_init(void)
-{
+{  
   intr_register_int(0x30, 3, INTR_ON, syscall_handler, "syscall");
   lock_init(&file_lock);
-}
+}  
 
 static void
 syscall_handler(struct intr_frame *f UNUSED)
@@ -249,8 +249,6 @@ int read(int fd, void *buffer, unsigned size)
 
   int returnVal;
 
-  lock_acquire(&file_lock);
-
   if (fd == STDIN)
   {
     *(uint32_t *)buffer = input_getc();
@@ -264,10 +262,10 @@ int read(int fd, void *buffer, unsigned size)
     return -1;
   }
 
+  lock_acquire(&file_lock); 
   struct file *file_pointer = file_from_fd(fd);
   check_file_null(file_pointer);
   returnVal = file_read(file_pointer, buffer, size);
-
   lock_release(&file_lock);
 
   return returnVal;

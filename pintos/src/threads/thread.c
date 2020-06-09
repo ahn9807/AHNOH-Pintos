@@ -137,6 +137,7 @@ void remove_file(struct file *f)
   int i = 0;
   int j = 0;
   struct thread *tc = thread_current();
+
   if (thread_current()->file_struct_size > 0)
   {
     //Searching file
@@ -145,10 +146,13 @@ void remove_file(struct file *f)
       if (f == file_from_fd(i))
       {
         //if find remove from list
+        /*
         for (j = i; j < tc->file_struct_size - 1; j++)
         {
           tc->file[j] = tc->file[j + 1];
         }
+        */
+        tc->file[i] == NULL;
         break;
       }
     }
@@ -357,6 +361,17 @@ const char *
 thread_name(void)
 {
   return thread_current()->name;
+}
+
+void close_all_files() {
+  int i=0;
+  for(i=0; i< thread_current()->file_struct_size; i++) {
+    if(thread_current()->file[i] != NULL) {
+      file_close(thread_current()->file[i]);
+    }
+
+    thread_current()->file_struct_size = 0;
+  }
 }
 
 /* Returns the running thread.
