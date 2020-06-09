@@ -206,7 +206,7 @@ int open(const char *file)
 
   lock_acquire(&file_lock);
   file_pointer = filesys_open(file);
-  printf("%x\n",file_pointer);
+  //printf("%x\n",file_pointer);
   //printf("0x%x\n", file_pointer);
   if (file_pointer == NULL)
   {
