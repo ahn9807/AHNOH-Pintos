@@ -70,6 +70,7 @@ process_execute (const char *file_name)
 	
 	//printf("tid %d\n", tid);
 	struct thread *userprogram = find_tid(tid);
+	userprogram->parent = thread_current();
 	/*
 	// this part moved into thread.c 
 	// don't know why but could't read tid in process.c T.T
@@ -95,10 +96,12 @@ process_execute (const char *file_name)
 
 	if(userprogram == NULL){
 		//printf("couldn't find userprogram\n");
-		return tid;
+		return TID_ERROR;
 	}
-	else if(userprogram != NULL){
+
+	if(userprogram != NULL){
 		//printf("try to push\n");
+		sema_down(&thread_current()->userprog_load);
 		list_push_back(&thread_current()->userprog, &userprogram->userprog_elem);
 	  //printf("pushed\n");
 		return tid;
@@ -123,9 +126,10 @@ start_process (void *file_name_)
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
+
   if (!success) 
     thread_exit ();
-
+	sema_up(&thread_current()->parent->userprog_load);
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
@@ -151,7 +155,7 @@ process_wait (tid_t child_tid UNUSED)
 	//printf("inside of wait\n");
   struct list_elem* element = list_begin(&(thread_current()->userprog));
 	struct thread *curr_thread = thread_current();
-	struct thread *userprog = NULL;
+	struct thread *child = NULL;
 	int return_exit;
 	int is_found = 0; //use int instead of boolean
 	
@@ -161,9 +165,9 @@ process_wait (tid_t child_tid UNUSED)
 
 	while(element != list_end(&(curr_thread->userprog))){
 		//printf("finding the child process\n");
-		curr_thread = list_entry(element, struct thread, userprog_elem);
+		child = list_entry(element, struct thread, userprog_elem);
 				
-		if(child_tid == curr_thread->tid){
+		if(child_tid == child->tid){
 			//printf("wait : found!!!\n");
 			is_found = 1;
 			/* //moved to the bottom of this function......
@@ -186,16 +190,16 @@ process_wait (tid_t child_tid UNUSED)
 
 	//SPENT MY WHOLE DAY TO SOLVE WAIT-TWICE.....
 	//this part solves wait-twice, thread->waiting is initialized in process_execute
-	if(curr_thread->waiting){
+	if(child->waiting){
 		return -1;
 	}
 	else{
-		curr_thread->waiting = 1;
+		child->waiting = 1;
 	}
-	list_remove(&(curr_thread->userprog_elem));
-	sema_down(&(curr_thread->userprog_wait));
-	return_exit = curr_thread->exit;
-	sema_up(&(curr_thread->userprog_exit));
+	list_remove(&(child->userprog_elem));
+	sema_down(&(child->userprog_wait));
+	return_exit = child->exit;
+	sema_up(&(child->userprog_exit));
 	return return_exit;
 }
 
@@ -229,10 +233,6 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
-		
-
-		struct list_elem *element = list_begin(&(cur->userprog));
-		struct thread *userprogram = NULL;
     sema_up(&(thread_current()->userprog_wait));
 		sema_down(&(thread_current()->userprog_exit));
 }

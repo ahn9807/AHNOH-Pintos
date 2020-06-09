@@ -363,6 +363,7 @@ thread_name(void)
   return thread_current()->name;
 }
 
+/*
 void close_all_files() {
   int i=0;
   for(i=0; i< thread_current()->file_struct_size; i++) {
@@ -372,7 +373,7 @@ void close_all_files() {
 
     thread_current()->file_struct_size = 0;
   }
-}
+}*/
 
 /* Returns the running thread.
    This is running_thread() plus a couple of sanity checks.
@@ -748,6 +749,7 @@ init_thread(struct thread *t, const char *name, int priority)
   list_init(&t->userprog);
   sema_init(&t->userprog_wait, 0);
   sema_init(&t->userprog_exit, 0);
+	sema_init(&t->userprog_load, 0);
   list_push_back(&(running_thread()->userprog), &(t->userprog_elem));
   t->exit = -1;
 #endif

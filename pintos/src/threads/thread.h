@@ -123,7 +123,7 @@ struct thread
    int exit;
 	 int waiting;
    struct semaphore userprog_load;
-
+	 struct thread *parent;
    /* Owned by thread.c. */
    unsigned magic; /* Detects stack overflow. */
 };

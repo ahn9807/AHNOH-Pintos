@@ -248,7 +248,7 @@ int read(int fd, void *buffer, unsigned size)
   //check_file_valid(file_pointer)
 
   int returnVal;
-
+	lock_acquire(&file_lock);
   if (fd == STDIN)
   {
     *(uint32_t *)buffer = input_getc();
@@ -262,7 +262,7 @@ int read(int fd, void *buffer, unsigned size)
     return -1;
   }
 
-  lock_acquire(&file_lock); 
+  //lock_acquire(&file_lock); 
   struct file *file_pointer = file_from_fd(fd);
   check_file_null(file_pointer);
   returnVal = file_read(file_pointer, buffer, size);
