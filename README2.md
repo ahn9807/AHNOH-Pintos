@@ -188,6 +188,62 @@ process exec를 하는 함수이다. process에 구현한 process_exec를 호출
     {
         return process_execute(cmd_line);
     }
+exec의 자세한 구현은 process_execute에서 이루어진다. 구현을 하는 도중 thread 구조체 내 필요한 변수들이 생겨 만들었고, 이를 init_thread 함수 내에서 초기화 시켰다. 주요 변수들은 다음과 같다.
+
+    struct list userprog; //돌아가게 되는 유저 프로그램의 리스트
+    struct semaphore userprog_wait; //parent가 기다리도록 설정하는 semaphore
+	struct semaphore userprog_exit; //parent가 userprog 리스트를 remove하기 전에 child가 먼저 죽는 현상을 방지하기 위한 semaphore
+    int waiting; //유저 프로그램이 이미 wait하고 있는 parent가 있는지 확인하는 변수
+
+
+
+exec에서는 먼저 입력된 커맨드에서 프로그램의 이름을 따로 저장한다. 그 후 추출한 이름을 이용해 새로운 thread를 만든다. 이때 생성되는 유저프로그램을 돌리는 thread는 현재 thread의 userprog라는 리스트에 저장된다.
+
+    tid_t
+    process_execute (const char *file_name) 
+    {
+    char *fn_copy;
+    tid_t tid;
+	struct file *f;
+
+    fn_copy = palloc_get_page (0);
+    if (fn_copy == NULL)
+    return TID_ERROR;
+    strlcpy (fn_copy, file_name, PGSIZE);
+	
+    char programe_name[256];
+    int index = 0;
+    char* last = file_name[0];
+
+    while(last != '\0' && last != ' ') {
+        programe_name[index] = file_name[index];
+        last = file_name[index];
+        index++;
+    }
+    programe_name[index - 1] = '\0';
+
+	if(filesys_open(programe_name)==NULL){
+		return -1;
+	}
+
+	thread_current()->waiting = 0;
+
+    /* Create a new thread to execute FILE_NAME. */
+    tid = thread_create (programe_name, PRI_DEFAULT, start_process, fn_copy);
+    if (tid == TID_ERROR){
+        palloc_free_page (fn_copy); 
+		return tid;
+	}
+	
+	struct thread *userprogram = find_tid(tid);
+	if(userprogram == NULL){
+		return tid;
+	}
+	else if(userprogram != NULL){
+		list_push_back(&thread_current()->userprog, &userprogram->userprog_elem);
+		return tid;
+	}
+    }
 
 process wait를 하는 함수이다. process에 구현한 process_wait를 호출하게 된다. 
 
@@ -195,6 +251,46 @@ process wait를 하는 함수이다. process에 구현한 process_wait를 호출
     {
         return process_wait(pid);
     }
+proess wait의 자세한 구현은 아래와 같다. 먼저, while문 내에서 해당 tid를 가진 자식 스레드를 찾는다. 자식 스레드가 없으면 -1을 리턴한다. 자식 프로세스가 있는 경우, 부모 프로세스가 자식이 끝날 때까지 기다려야 하므로 wait을 담당하는 semaphore를 자식이 감소시켜 부모의 진행을 막는다. 또한, 자식이 실행되기 이전 부모가 너무 빨리 끝나는 것을 방지하기 위해 exit semaphore를 process_execute에서 감소시켰는데, 자식 프로세스를 wait하고 나면 부모는 정상적으로 자식을 기다렸다는 것을 의미하므로 exit semaphore를 마지막에 증가시켜준다.
+
+    int
+    process_wait (tid_t child_tid UNUSED) 
+    {
+        struct list_elem* element = list_begin(&(thread_current()->userprog));
+	    struct thread *curr_thread = thread_current();
+	    struct thread *userprog = NULL;
+	    int return_exit;
+	    int is_found = 0; //use int instead of boolean
+	
+	    if(find_tid(child_tid)==NULL){
+		    return -1;
+	    }
+
+	    while(element != list_end(&(curr_thread->userprog))){
+		    curr_thread = list_entry(element, struct thread, userprog_elem);
+				
+		    if(child_tid == curr_thread->tid){
+			    is_found = 1;
+			    break;
+		    }
+		    element = list_next(element);
+	    }
+	    if(is_found == 0){
+  	    return -1;
+	    }
+	    if(curr_thread->waiting){
+		    return -1;
+	    }
+	    else{
+		    curr_thread->waiting = 1;
+	    }
+	    list_remove(&(curr_thread->userprog_elem));
+	    sema_down(&(curr_thread->userprog_wait));
+	    return_exit = curr_thread->exit;
+	    sema_up(&(curr_thread->userprog_exit));
+	    return return_exit;
+    }
+
 
 새로운 file을 만드는 시스템 호출이다. 주어진 file주소가 null인지 valid 한지 검사한후 filesys_create를 이용해 파일을 만들어 주게 된다. 
 
